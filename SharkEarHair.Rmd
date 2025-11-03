@@ -1,0 +1,29 @@
+---
+title: "Shark Ear Hair"
+author: "C Mull"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## 
+
+```{r libraries}
+library(tidyverse)
+library(readxl)
+library(brms)
+library(brmstools)
+```
+
+
+
+```{r}
+
+earhair
+
+```
+
+
