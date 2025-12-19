@@ -6,12 +6,14 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
 ```
 
-## 
+## Shark Ear Hair
+This script is for the analysis of ear hair density in 6 innner ear components (lag, sac, utr, mn_pos, mn_ant, and mn_avg) and how it corresponds to hearing sensitivty across a range of frequencies. First the data will be loaded and the response variables (Thr_int, PAL_int) and densities will be standardized (scaled and centered) to allow for comparison across structures.
 
-```{r libraries}
+```{r libraries, echo=FALSE}
+#library(plyr)
 library(tidyverse)
 library(readxl)
 library(brms)
@@ -19,11 +21,166 @@ library(brmstools)
 ```
 
 
+```{r load data, echo=FALSE}
 
-```{r}
+#Data is in an excel file on different sheets for each species (Rig, School, Carpet). Load each individually and bind.
 
-earhair
+#load species sheets
+earHairRig <- read_excel("DataMaster_HearingVSHairs_adjusted.xlsx", 
+    sheet = "PaperRig") %>% 
+  mutate(species = "Rig")
+
+earHairSchool <- read_excel("DataMaster_HearingVSHairs_adjusted.xlsx", 
+    sheet = "PaperSchool") %>% 
+  mutate(species = "School")
+
+earHairCarpet <- read_excel("DataMaster_HearingVSHairs_adjusted.xlsx", 
+    sheet = "PaperCarpet") %>% 
+  mutate(species = "Carpet")
+
+#bind into longform data and clean
+earHair <- earHairRig %>% 
+  bind_rows(earHairSchool) %>% 
+  bind_rows(earHairCarpet)
+
+#scale and center variables
+earHair <- earHair %>% 
+  filter(subject != "Rig5") %>% 
+  mutate(Thr_int_scale = scale(Thr_int, center = T, scale = T),
+         PAL_int_scale = scale(PAL_int, center = T, scale = T),
+         #Accel_int_raw_scale = scale(Accel_int_raw, center = T, scale = T), #two decimal points in this column?
+         lag_density_scale = scale(`lag_density/10,000`, center = T, scale = T),
+         sac_density_scale = scale(`sac_density/10,000`, center = T, scale = T),
+         utr_density_scale = scale(`utr_density/10,000`, center = T, scale = T),
+         mn_pos_density_scale = scale(`mn_pos_density/10,000`, center = T, scale = T),
+         mn_ant_density_scale = scale(`mn_ant_density/10,000`, center = T, scale = T),
+         mn_avg_density_scale = scale(`mn_average_density/10,000`, center = T, scale = T)) %>% 
+  dplyr::rename(lag_density = `lag_density/10,000`,
+                sac_density = `sac_density/10,000`,
+                utr_density = `utr_density/10,000`,
+                mn_ant_density = `mn_ant_density/10,000`,
+                mn_pos_density = `mn_pos_density/10,000`,
+                mn_avg_density = `mn_average_density/10,000`)
 
 ```
 
+
+# Exploratory Plots
+
+Visualize how the chosen thresholds (Thr_int, PAL_int) vary across frequencies and species need to plot threshold over Fr for each species (line plots with error at each frequency). First need summary stats by groupings
+
+```{r helper function for group sd, echo=FALSE}
+
+data_summary <- function(data, varname, groupnames){
+  require(plyr)
+  summary_func <- function(x, col){
+    c(mean = mean(x[[col]], na.rm=TRUE),
+      sd = sd(x[[col]], na.rm=TRUE))
+  }
+  data_sum<-ddply(data, groupnames, .fun=summary_func,
+                  varname)
+  data_sum <- rename(data_sum, c("mean" = varname))
+ return(data_sum)
+}
+```
+
+```{r summaries of thresholds}
+df_Thr <- data_summary(earHair, varname="Thr_int_scale", 
+                    groupnames=c("species", "frequency"))
+head(df_Thr)
+
+df_PAL <- data_summary(earHair, varname="PAL_int_scale", 
+                    groupnames=c("species", "frequency"))
+head(df_PAL)
+```
+
+### Thresholds over fequencies by species
+
+```{r plot of thresholds over frequencies by species, echo=FALSE}
+ThrvFreq <- ggplot(df_Thr, aes(x=frequency, y=Thr_int_scale, color = species)) +
+  geom_line() +
+  geom_point() +
+  geom_errorbar(aes(ymin=Thr_int_scale-sd, ymax=Thr_int_scale+sd), width=.2,
+                 position=position_dodge(0.1))+
+  theme(legend.position = "none")
+
+PALvFreq <- ggplot(df_PAL, aes(x=frequency, y=PAL_int_scale, color = species)) +
+  geom_line() +
+  geom_point() +
+  geom_errorbar(aes(ymin=PAL_int_scale-sd, ymax=PAL_int_scale+sd), width=.2,
+                 position=position_dodge(0.05))
+
+ggpubr::ggarrange(ThrvFreq, PALvFreq, ncol = 2, nrow = 1, common.legend = T, legend = "bottom")
+```
+
+This looks like it doesn't matter if we choose Thr or PAL as the response across frequencies as their scaled values are almost identical. Notably there is a drop off in sensistivty across all species at the highest frequncies, while carpet sharks exhibit a decline in sensitivity after 300 MHz.
+
+
+### Densities across inner ear structures by species
+
+```{r summaries of densities}
+
+#select species
+
+earHair %>% 
+  dplyr::select(species, subject, "lag"= "lag_density", "sac"="sac_density", "utr"="utr_density", "mn_pos"= "mn_pos_density", "mn_ant"= "mn_ant_density", "mn_avg"= "mn_avg_density") %>% 
+  distinct() %>% 
+  pivot_longer(cols = lag:mn_avg, values_to = "hair_density", names_to = "structure") %>% 
+  dplyr::group_by(species, structure) %>% 
+  dplyr::summarise(density = mean(hair_density, na.rm=T),
+                   sd = sd(hair_density, na.rm=T)) %>% 
+  ggplot(aes(x=structure, y = density, fill = species))+
+  geom_bar(stat="identity", color="black", 
+           position=position_dodge()) +
+  geom_errorbar(aes(ymin=density-sd, ymax=density+sd), width=.2,
+                 position=position_dodge(.9))
+
+```
+
+The biggest differences looks to be in the density of hair cells in lag followed by sac and utr.
+
+
+
+
+## Model
+
+The best approach is a linear mixed-effects model which will allow us to fit varying intercepts by species. Here is a first model looking at the effect of lag hair cell density on hearing thresholds. This is a first pass and there are a few things to consider: whenther to use a smoothing parameter or spline for the frequencies, and whether there are more informative priors we can apply here.
+
+```{r}
+
+fit_lag <- readRDS("fit_lag.rds")
+
+#fit_lag <- brm(
+#  PAL_int_scale ~ lag_density_scale + s(frequency, k=8) + (1 | species/subject),
+#  data = earHair,
+#  family = gaussian(),
+#  prior = c(
+#    prior(normal(0, 1), class = "b"),
+#    prior(normal(0, 2), class = "Intercept"),
+#    prior(exponential(1), class = "sd"),
+#    prior(exponential(1), class = "sigma")
+#  ),
+#  chains = 4,
+#  iter = 10000,
+#  cores = 4,
+#  control = list(adapt_delta = 0.95)
+#)
+
+
+
+```
+
+
+```{r model summary}
+
+summary(fit_lag)
+
+```
+
+
+```{r model plots}
+
+plot(fit_lag)
+
+```
 
