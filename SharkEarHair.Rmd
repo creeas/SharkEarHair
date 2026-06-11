@@ -144,59 +144,180 @@ The biggest differences looks to be in the density of hair cells in lag followed
 
 ## Model
 
-The best approach is a linear mixed-effects model which will allow us to fit varying intercepts by species. Here is a first model looking at the effect of lag hair cell density on hearing thresholds. This is a first pass and there are a few things to consider: whether to use a smoothing parameter or spline for the frequencies, and whether there are more informative priors we can apply here.
+We fit a Bayesian linear mixed-effects model predicting hearing sensitivity (PAL_int_scale) from hair cell densities across three inner ear structures (lagena, saccule, utricle) and a smooth term for frequency. Species is treated as a fixed effect rather than a random grouping because only 3 species are present — too few levels to reliably estimate a random-effect variance. Individual subjects are retained as a random intercept nested within species to account for repeated measures across frequencies.
 
-```{r}
+Hair cell density predictors across structures are likely correlated, so we also fit separate single-structure models and use LOO-IC to compare their predictive performance.
 
-fit_lag <- readRDS("fit_lag.rds")
+```{r fit models, cache=TRUE}
 
-fit_lag <- brm(
-  PAL_int_scale ~ lag_density_scale + sac_density_scale + utr_density_scale + s(frequency, k=5) + (1 | species/subject),
-  data = earHair,
-  family = gaussian(),
-  prior = c(
+refit <- FALSE  # set to TRUE to refit models, FALSE to load saved versions
+
+if (refit) {
+
+  # Shared priors
+  my_priors <- c(
     prior(normal(0, 1), class = "b"),
     prior(normal(0, 2), class = "Intercept"),
     prior(exponential(1), class = "sd"),
     prior(exponential(1), class = "sigma")
-  ),
-  chains = 4,
-  iter = 10000,
-  cores = 4,
-  control = list(adapt_delta = 0.95)
-)
+  )
 
+  # Combined model: all three structures
+  fit_combined <- brm(
+    PAL_int_scale ~ lag_density_scale + sac_density_scale + utr_density_scale +
+      species + s(frequency, k = 8) + (1 | species:subject),
+    data = earHair,
+    family = gaussian(),
+    prior = my_priors,
+    chains = 4,
+    iter = 10000,
+    cores = 4,
+    control = list(adapt_delta = 0.99, max_treedepth = 15)
+  )
 
+  # Single-structure models for LOO comparison
+  fit_lag <- brm(
+    PAL_int_scale ~ lag_density_scale + species + s(frequency, k = 8) + (1 | species:subject),
+    data = earHair,
+    family = gaussian(),
+    prior = my_priors,
+    chains = 4,
+    iter = 10000,
+    cores = 4,
+    control = list(adapt_delta = 0.99, max_treedepth = 15)
+  )
+
+  fit_sac <- brm(
+    PAL_int_scale ~ sac_density_scale + species + s(frequency, k = 8) + (1 | species:subject),
+    data = earHair,
+    family = gaussian(),
+    prior = my_priors,
+    chains = 4,
+    iter = 10000,
+    cores = 4,
+    control = list(adapt_delta = 0.99, max_treedepth = 15)
+  )
+
+  fit_utr <- brm(
+    PAL_int_scale ~ utr_density_scale + species + s(frequency, k = 8) + (1 | species:subject),
+    data = earHair,
+    family = gaussian(),
+    prior = my_priors,
+    chains = 4,
+    iter = 10000,
+    cores = 4,
+    control = list(adapt_delta = 0.99, max_treedepth = 15)
+  )
+
+  saveRDS(fit_combined, "fit_combined.rds")
+  saveRDS(fit_lag,      "fit_lag_v2.rds")
+  saveRDS(fit_sac,      "fit_sac.rds")
+  saveRDS(fit_utr,      "fit_utr.rds")
+
+} else {
+
+  fit_combined <- readRDS("fit_combined.rds")
+  fit_lag      <- readRDS("fit_lag_v2.rds")
+  fit_sac      <- readRDS("fit_sac.rds")
+  fit_utr      <- readRDS("fit_utr.rds")
+
+}
 
 ```
 
 
-```{r model summary}
+```{r model diagnostics}
 
-#full model summary
-summary(fit_lag)
+# Check for divergences — should be 0 after the fix
+np_combined <- nuts_params(fit_combined)
+cat("Divergent transitions (combined model):", sum(np_combined$Value[np_combined$Parameter == "divergent__"]), "\n")
 
-#fixed effects
-posterior_summary(fit_lag)
+# Full summary
+summary(fit_combined)
 
-pp_check(fit_lag)
+```
 
-#posterior prediction
-pp <- posterior_predict(fit_lag)
-plot(pp)
 
-#splines
-sds(fit_lag)
+```{r posterior predictive check}
+
+# Overlay of observed vs. model-predicted distributions
+pp_check(fit_combined, ndraws = 100)
 
 ```
 
 
 ```{r model plots}
 
-plot(fit_lag)
+# Trace plots and marginal posteriors for all parameters
+plot(fit_combined)
 
-tmp <- conditional_smooths(fit_lag)
-plot(tmp)
-bayesplot::pp_check(fit_lag)
+# Non-linear frequency effect
+plot(conditional_smooths(fit_combined))
+
+# Conditional effects of each hair cell density predictor (marginalising over others)
+plot(conditional_effects(fit_combined, effects = "lag_density_scale"))
+plot(conditional_effects(fit_combined, effects = "sac_density_scale"))
+plot(conditional_effects(fit_combined, effects = "utr_density_scale"))
+
 ```
+
+
+```{r loo comparison}
+
+# Add LOO criterion to each model (uses existing MCMC draws — no refitting)
+fit_combined <- add_criterion(fit_combined, "loo")
+fit_lag      <- add_criterion(fit_lag,      "loo")
+fit_sac      <- add_criterion(fit_sac,      "loo")
+fit_utr      <- add_criterion(fit_utr,      "loo")
+
+# Compare models — lower LOOIC is better
+loo_compare(fit_combined, fit_lag, fit_sac, fit_utr)
+
+```
+
+## Model selection and posterior interpretation
+
+### LOO-IC model comparison
+
+LOO-IC comparison ranked `fit_utr` as the best-predicting model, with `fit_sac` statistically indistinguishable (elpd_diff = 0.0, SE = 1.0), `fit_lag` also not meaningfully different (elpd_diff = −0.3, SE = 1.0), and `fit_combined` marginally worse (elpd_diff = −1.5, SE = 0.7, ratio ≈ 2.1). Adding all three predictors simultaneously reduced predictive performance, likely because the hair cell density measures are correlated across structures, introducing noise rather than independent signal. `fit_utr` is taken as the primary model for interpretation.
+
+### Posterior distributions — fit_utr
+
+```{r posterior plot, fig.height=6}
+
+library(tidybayes)
+library(ggdist)
+
+# Extract draws for parameters of interest
+draws_utr <- fit_utr %>%
+  spread_draws(b_utr_density_scale, b_speciesRig, b_speciesSchool, sigma) %>%
+  pivot_longer(cols = c(b_utr_density_scale, b_speciesRig, b_speciesSchool, sigma),
+               names_to = "parameter", values_to = "value") %>%
+  mutate(parameter = recode(parameter,
+    b_utr_density_scale = "utr hair cell density (scaled)",
+    b_speciesRig        = "species: Rig vs Carpet",
+    b_speciesSchool     = "species: School vs Carpet",
+    sigma               = "residual SD (sigma)"
+  ))
+
+ggplot(draws_utr, aes(x = value, y = parameter, fill = parameter)) +
+  stat_halfeye(.width = c(0.66, 0.95), point_interval = mean_qi,
+               normalize = "panels") +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey50") +
+  scale_fill_brewer(palette = "Set2", guide = "none") +
+  labs(x = "Posterior estimate", y = NULL,
+       title = "Posterior distributions — fit_utr",
+       subtitle = "Point = mean, inner bar = 66% CI, outer bar = 95% CI. Dashed line at zero.") +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank())
+
+```
+
+### Interpretation
+
+**Utricle hair cell density** — the posterior mean is positive (β ≈ 0.08) but the 95% credible interval spans zero (−0.08 to 0.24), with approximately 85% of posterior mass above zero. This is suggestive of a weak positive relationship between utricle hair cell density and hearing threshold (PAL_int), but the evidence is insufficient to exclude a null effect. The direction of the effect — higher density associated with higher (worse) hearing thresholds — warrants biological scrutiny and may reflect interspecific confounding.
+
+**Species differences** are the most clearly supported signals in the model. Rig sharks have credibly higher hearing thresholds than Carpet sharks (the reference level; β ≈ 0.52, 95% CI: 0.14–0.89, P(β > 0) ≈ 99.5%). School sharks show a positive but marginal offset (β ≈ 0.30, 95% CI: −0.06–0.67, P(β > 0) ≈ 95%).
+
+**Residual variance** remains high (σ ≈ 0.67 on a standardised response), indicating that species identity and utricle hair cell density together explain only a moderate proportion of the variation in hearing sensitivity. Frequency (captured by the spline term) accounts for additional structured variance.
 
