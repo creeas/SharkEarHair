@@ -113,7 +113,7 @@ PALvFreq <- ggplot(df_PAL, aes(x=frequency, y=PAL_int_scale, color = species)) +
 ggpubr::ggarrange(ThrvFreq, PALvFreq, ncol = 2, nrow = 1, common.legend = T, legend = "bottom")
 ```
 
-This looks like it doesn't matter if we choose Thr or PAL as the response across frequencies as their scaled values are almost identical. Notably there is a drop off in sensistivty across all species at the highest frequncies, while carpet sharks exhibit a decline in sensitivity after 300 MHz.
+This looks like it doesn't matter if we choose Thr or PAL as the response across frequencies as their scaled values are almost identical. Notably there is a drop off in sensitivity across all species at the highest frequencies, while carpet sharks exhibit a decline in sensitivity after 300 MHz.
 
 
 ### Densities across inner ear structures by species
@@ -144,27 +144,27 @@ The biggest differences looks to be in the density of hair cells in lag followed
 
 ## Model
 
-The best approach is a linear mixed-effects model which will allow us to fit varying intercepts by species. Here is a first model looking at the effect of lag hair cell density on hearing thresholds. This is a first pass and there are a few things to consider: whenther to use a smoothing parameter or spline for the frequencies, and whether there are more informative priors we can apply here.
+The best approach is a linear mixed-effects model which will allow us to fit varying intercepts by species. Here is a first model looking at the effect of lag hair cell density on hearing thresholds. This is a first pass and there are a few things to consider: whether to use a smoothing parameter or spline for the frequencies, and whether there are more informative priors we can apply here.
 
 ```{r}
 
 fit_lag <- readRDS("fit_lag.rds")
 
-#fit_lag <- brm(
-#  PAL_int_scale ~ lag_density_scale + s(frequency, k=8) + (1 | species/subject),
-#  data = earHair,
-#  family = gaussian(),
-#  prior = c(
-#    prior(normal(0, 1), class = "b"),
-#    prior(normal(0, 2), class = "Intercept"),
-#    prior(exponential(1), class = "sd"),
-#    prior(exponential(1), class = "sigma")
-#  ),
-#  chains = 4,
-#  iter = 10000,
-#  cores = 4,
-#  control = list(adapt_delta = 0.95)
-#)
+fit_lag <- brm(
+  PAL_int_scale ~ lag_density_scale + sac_density_scale + utr_density_scale + s(frequency, k=5) + (1 | species/subject),
+  data = earHair,
+  family = gaussian(),
+  prior = c(
+    prior(normal(0, 1), class = "b"),
+    prior(normal(0, 2), class = "Intercept"),
+    prior(exponential(1), class = "sd"),
+    prior(exponential(1), class = "sigma")
+  ),
+  chains = 4,
+  iter = 10000,
+  cores = 4,
+  control = list(adapt_delta = 0.95)
+)
 
 
 
@@ -173,7 +173,20 @@ fit_lag <- readRDS("fit_lag.rds")
 
 ```{r model summary}
 
+#full model summary
 summary(fit_lag)
+
+#fixed effects
+posterior_summary(fit_lag)
+
+pp_check(fit_lag)
+
+#posterior prediction
+pp <- posterior_predict(fit_lag)
+plot(pp)
+
+#splines
+sds(fit_lag)
 
 ```
 
@@ -182,5 +195,8 @@ summary(fit_lag)
 
 plot(fit_lag)
 
+tmp <- conditional_smooths(fit_lag)
+plot(tmp)
+bayesplot::pp_check(fit_lag)
 ```
 
