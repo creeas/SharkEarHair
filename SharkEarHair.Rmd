@@ -144,7 +144,7 @@ The biggest differences looks to be in the density of hair cells in lag followed
 
 ## Model
 
-We fit a Bayesian linear mixed-effects model predicting hearing sensitivity (PAL_int_scale) from hair cell densities across three inner ear structures (lagena, saccule, utricle) and a smooth term for frequency. Species is treated as a fixed effect rather than a random grouping because only 3 species are present — too few levels to reliably estimate a random-effect variance. Individual subjects are retained as a random intercept nested within species to account for repeated measures across frequencies.
+We fit a Bayesian linear mixed-effects model predicting hearing sensitivity (PAL_int_scale) from hair cell densities across 4 inner ear structures (lagena, saccule, utricle, and macula neglecta) and a smooth term for frequency. Species is treated as a fixed effect rather than a random grouping because only 3 species are present — too few levels to reliably estimate a random-effect variance. Individual subjects are retained as a random intercept nested within species to account for repeated measures across frequencies.
 
 Hair cell density predictors across structures are likely correlated, so we also fit separate single-structure models and use LOO-IC to compare their predictive performance.
 
