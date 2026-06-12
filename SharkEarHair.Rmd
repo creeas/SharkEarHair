@@ -208,11 +208,47 @@ if (refit) {
     cores = 4,
     control = list(adapt_delta = 0.99, max_treedepth = 15)
   )
+  
+   fit_mn_pos <- brm(
+    PAL_int_scale ~ mn_pos_density_scale + species + s(frequency, k = 8) + (1 | species:subject),
+    data = earHair,
+    family = gaussian(),
+    prior = my_priors,
+    chains = 4,
+    iter = 10000,
+    cores = 4,
+    control = list(adapt_delta = 0.99, max_treedepth = 15)
+  )
+   
+   fit_mn_ant <- brm(
+    PAL_int_scale ~ mn_ant_density_scale + species + s(frequency, k = 8) + (1 | species:subject),
+    data = earHair,
+    family = gaussian(),
+    prior = my_priors,
+    chains = 4,
+    iter = 10000,
+    cores = 4,
+    control = list(adapt_delta = 0.99, max_treedepth = 15)
+  )
+   
+  fit_mn_avg <- brm(
+    PAL_int_scale ~ mn_avg_density_scale + species + s(frequency, k = 8) + (1 | species:subject),
+    data = earHair,
+    family = gaussian(),
+    prior = my_priors,
+    chains = 4,
+    iter = 10000,
+    cores = 4,
+    control = list(adapt_delta = 0.99, max_treedepth = 15)
+  ) 
 
   saveRDS(fit_combined, "fit_combined.rds")
   saveRDS(fit_lag,      "fit_lag.rds")
   saveRDS(fit_sac,      "fit_sac.rds")
   saveRDS(fit_utr,      "fit_utr.rds")
+  saveRDS(fit_mn_pos,   "fit_mn_pos.rds")
+  saveRDS(fit_mn_ant,   "fit_mn_ant.rds")
+  saveRDS(fit_mn_avg,   "fit_mn_avg.rds")
 
 } else {
 
