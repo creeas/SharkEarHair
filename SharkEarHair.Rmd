@@ -269,9 +269,12 @@ fit_combined <- add_criterion(fit_combined, "loo")
 fit_lag      <- add_criterion(fit_lag,      "loo")
 fit_sac      <- add_criterion(fit_sac,      "loo")
 fit_utr      <- add_criterion(fit_utr,      "loo")
+fit_mn_avg   <- add_criterion(fit_mn_avg,   "loo")
+fit_mn_pos   <- add_criterion(fit_mn_pos,   "loo")
+fit_mn_ant   <- add_criterion(fit_mn_ant,   "loo")
 
-# Compare models — lower LOOIC is better
-loo_compare(fit_combined, fit_lag, fit_sac, fit_utr)
+# Compare models — higher ELPD (lower LOOIC) is better
+loo_compare(fit_combined, fit_lag, fit_sac, fit_utr, fit_mn_avg, fit_mn_pos, fit_mn_ant)
 
 ```
 
@@ -279,9 +282,11 @@ loo_compare(fit_combined, fit_lag, fit_sac, fit_utr)
 
 ### LOO-IC model comparison
 
-LOO-IC comparison ranked `fit_utr` as the best-predicting model, with `fit_sac` statistically indistinguishable (elpd_diff = 0.0, SE = 1.0), `fit_lag` also not meaningfully different (elpd_diff = −0.3, SE = 1.0), and `fit_combined` marginally worse (elpd_diff = −1.5, SE = 0.7, ratio ≈ 2.1). Adding all three predictors simultaneously reduced predictive performance, likely because the hair cell density measures are correlated across structures, introducing noise rather than independent signal. `fit_utr` is taken as the primary model for interpretation.
+LOO-IC comparison ranked `fit_mn_avg` as the best-predicting model. However, the three macula neglecta models (`fit_mn_avg`, `fit_mn_pos`, `fit_mn_ant`) are statistically indistinguishable from one another (elpd_diff/SE ratios of 0.4 and 0.6 respectively, both well below the threshold of 2), reflecting the fact that posterior, anterior, and average macula neglecta density are measuring related aspects of the same structure. The lagena (`fit_lag`), saccule (`fit_sac`), and utricle (`fit_utr`) models perform somewhat worse but their differences also do not clearly exceed twice their standard errors. Only `fit_combined` is meaningfully worse than the top model (elpd_diff = −2.3, SE = 1.1, ratio ≈ 2.1), consistent with the earlier finding that combining correlated predictors reduces rather than improves predictive performance.
 
-### Posterior distributions — fit_utr
+`fit_mn_avg` is taken as the primary model for interpretation, as average macula neglecta density summarises anterior and posterior regions jointly and offers the most parsimonious representation of that structure.
+
+### Posterior distributions — fit_mn_avg
 
 ```{r posterior plot, fig.height=6}
 
@@ -289,24 +294,24 @@ library(tidybayes)
 library(ggdist)
 
 # Extract draws for parameters of interest
-draws_utr <- fit_utr %>%
-  spread_draws(b_utr_density_scale, b_speciesRig, b_speciesSchool, sigma) %>%
-  pivot_longer(cols = c(b_utr_density_scale, b_speciesRig, b_speciesSchool, sigma),
+draws_mn_avg <- fit_mn_avg %>%
+  spread_draws(b_mn_avg_density_scale, b_speciesRig, b_speciesSchool, sigma) %>%
+  pivot_longer(cols = c(b_mn_avg_density_scale, b_speciesRig, b_speciesSchool, sigma),
                names_to = "parameter", values_to = "value") %>%
   mutate(parameter = recode(parameter,
-    b_utr_density_scale = "utr hair cell density (scaled)",
-    b_speciesRig        = "species: Rig vs Carpet",
-    b_speciesSchool     = "species: School vs Carpet",
-    sigma               = "residual SD (sigma)"
+    b_mn_avg_density_scale = "mn average density (scaled)",
+    b_speciesRig           = "species: Rig vs Carpet",
+    b_speciesSchool        = "species: School vs Carpet",
+    sigma                  = "residual SD (sigma)"
   ))
 
-ggplot(draws_utr, aes(x = value, y = parameter, fill = parameter)) +
+ggplot(draws_mn_avg, aes(x = value, y = parameter, fill = parameter)) +
   stat_halfeye(.width = c(0.66, 0.95), point_interval = mean_qi,
                normalize = "panels") +
   geom_vline(xintercept = 0, linetype = "dashed", colour = "grey50") +
   scale_fill_brewer(palette = "Set2", guide = "none") +
   labs(x = "Posterior estimate", y = NULL,
-       title = "Posterior distributions — fit_utr",
+       title = "Posterior distributions — fit_mn_avg",
        subtitle = "Point = mean, inner bar = 66% CI, outer bar = 95% CI. Dashed line at zero.") +
   theme_bw() +
   theme(panel.grid.minor = element_blank())
@@ -315,9 +320,140 @@ ggplot(draws_utr, aes(x = value, y = parameter, fill = parameter)) +
 
 ### Interpretation
 
-**Utricle hair cell density** — the posterior mean is positive (β ≈ 0.08) but the 95% credible interval spans zero (−0.08 to 0.24), with approximately 85% of posterior mass above zero. This is suggestive of a weak positive relationship between utricle hair cell density and hearing threshold (PAL_int), but the evidence is insufficient to exclude a null effect. The direction of the effect — higher density associated with higher (worse) hearing thresholds — warrants biological scrutiny and may reflect interspecific confounding.
+**Macula neglecta average hair cell density** — the posterior mean is positive (β ≈ 0.13) and the 95% credible interval is close to but just spans zero (−0.01 to 0.26). This is the strongest density effect observed across all structures tested, and is suggestive of a positive relationship between macula neglecta hair cell density and hearing threshold (PAL_int). The direction — higher density associated with higher (worse) thresholds — warrants biological consideration and may in part reflect interspecific differences in both sensory morphology and hearing ability.
 
-**Species differences** are the most clearly supported signals in the model. Rig sharks have credibly higher hearing thresholds than Carpet sharks (the reference level; β ≈ 0.52, 95% CI: 0.14–0.89, P(β > 0) ≈ 99.5%). School sharks show a positive but marginal offset (β ≈ 0.30, 95% CI: −0.06–0.67, P(β > 0) ≈ 95%).
+**Species differences** remain the most clearly supported signals in the model. Rig sharks have credibly higher hearing thresholds than Carpet sharks (the reference level; β ≈ 0.68, 95% CI: 0.34–1.01, P(β > 0) ≈ 99.9%). School sharks show a positive and credible offset (β ≈ 0.38, 95% CI: 0.07–0.70, P(β > 0) ≈ 99%).
 
-**Residual variance** remains high (σ ≈ 0.67 on a standardised response), indicating that species identity and utricle hair cell density together explain only a moderate proportion of the variation in hearing sensitivity. Frequency (captured by the spline term) accounts for additional structured variance.
+**Residual variance** remains substantial (σ ≈ 0.67 on a standardised response), indicating that species identity and macula neglecta density together account for a moderate but incomplete proportion of variation in hearing sensitivity. The frequency spline captures additional structured variance not attributable to hair cell density.
 
+
+
+## Species-specific audiograms
+
+The model above assumes a single shared frequency response curve shifted additively per species. The exploratory plots suggest carpet sharks may have a distinct audiogram shape, particularly at higher frequencies. We therefore fit a model with species-specific frequency smooths (`by = species`) to test whether audiogram shape differs across species, and compare it to `fit_mn_avg` via LOO-IC.
+
+```{r fit species-specific smooths, cache=TRUE}
+
+if (refit) {
+
+  fit_by_species <- brm(
+    PAL_int_scale ~ mn_avg_density_scale + species +
+      s(frequency, by = species, k = 8) + (1 | species:subject),
+    data = earHair,
+    family = gaussian(),
+    prior = my_priors,
+    chains = 4,
+    iter = 10000,
+    cores = 4,
+    control = list(adapt_delta = 0.99, max_treedepth = 15)
+  )
+
+  saveRDS(fit_by_species, "fit_by_species.rds")
+
+} else {
+
+  fit_by_species <- readRDS("fit_by_species.rds")
+
+}
+
+```
+
+
+```{r species-smooth diagnostics}
+
+np_by_species <- nuts_params(fit_by_species)
+cat("Divergent transitions:", sum(np_by_species$Value[np_by_species$Parameter == "divergent__"]), "\n")
+
+summary(fit_by_species)
+
+```
+
+
+```{r species-smooth loo comparison}
+
+fit_by_species <- add_criterion(fit_by_species, "loo")
+fit_mn_avg     <- add_criterion(fit_mn_avg,     "loo")
+
+loo_compare(fit_by_species, fit_mn_avg)
+
+```
+
+A ratio of |elpd_diff / se_diff| > 2 indicates the species-specific smooth model is meaningfully better supported. If the ratio is below 2, the shared-curve model (`fit_mn_avg`) is preferred on parsimony grounds.
+
+```{r species audiogram plot, fig.height=5}
+
+# Plot species-specific frequency smooths with posterior uncertainty
+conditions <- data.frame(species = c("Carpet", "Rig", "School"))
+rownames(conditions) <- c("Carpet", "Rig", "School")
+
+ce <- conditional_effects(
+  fit_by_species,
+  effects = "frequency:species",
+  conditions = conditions,
+  re_formula = NA
+)
+
+plot(ce, plot = FALSE)[[1]] +
+  labs(x = "Frequency (Hz)", y = "Hearing threshold (PAL, scaled)",
+       title = "Species-specific audiograms",
+       subtitle = "Posterior mean ± 95% CI. Fitted from species-specific frequency smooths.",
+       colour = "Species", fill = "Species") +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank())
+
+```
+
+### Compare species senstitivities across frequencies
+
+We will compare the species specific hearing thresholds across the range of frequencies using the estimated marginal means.
+
+
+```{r pairwise contrasts by frequency, fig.height=5, fig.width=8}
+
+library(emmeans)
+
+# Marginal means per species at each recorded frequency
+emm <- emmeans(fit_by_species, ~ species | frequency,
+               at = list(frequency = sort(unique(earHair$frequency))),
+               re_formula = NA)
+
+# Tidy pairwise contrasts
+pw <- as.data.frame(pairs(emm)) %>%
+  dplyr::rename(lower = lower.HPD, upper = upper.HPD) %>%
+  mutate(
+    frequency = factor(frequency),
+    credible  = !(lower < 0 & upper > 0),  # TRUE if 95% HPD excludes zero
+    contrast  = recode(contrast,
+      "Carpet - Rig"    = "Carpet vs Rig",
+      "Carpet - School" = "Carpet vs School",
+      "Rig - School"    = "Rig vs School"
+    )
+  )
+
+ggplot(pw, aes(x = frequency, y = estimate, colour = credible)) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey60") +
+  geom_linerange(aes(ymin = lower, ymax = upper), linewidth = 0.8) +
+  geom_point(size = 2.5) +
+  facet_wrap(~ contrast, ncol = 3) +
+  scale_colour_manual(
+    values = c("FALSE" = "grey60", "TRUE" = "#185FA5"),
+    labels = c("FALSE" = "CI includes zero", "TRUE" = "CI excludes zero"),
+    name   = NULL
+  ) +
+  labs(
+    x        = "Frequency (Hz)",
+    y        = "Contrast estimate (scaled PAL threshold)",
+    title    = "Pairwise species contrasts by frequency",
+    subtitle = "Points = posterior median, bars = 95% HPD interval. Blue = credible difference."
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid.minor  = element_blank(),
+    legend.position   = "bottom",
+    strip.background  = element_rect(fill = "grey95", colour = "grey80")
+  )
+
+```
+
+
+Carpet sharks have less sensitive hearing across the highest frequencies. While Rig has more sensitive hearing than school shark 450 and 600 Hz, and likely 800 Hz with only a small portion of the HPD crossing zero.
