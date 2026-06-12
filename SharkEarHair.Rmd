@@ -210,16 +210,19 @@ if (refit) {
   )
 
   saveRDS(fit_combined, "fit_combined.rds")
-  saveRDS(fit_lag,      "fit_lag_v2.rds")
+  saveRDS(fit_lag,      "fit_lag.rds")
   saveRDS(fit_sac,      "fit_sac.rds")
   saveRDS(fit_utr,      "fit_utr.rds")
 
 } else {
 
   fit_combined <- readRDS("fit_combined.rds")
-  fit_lag      <- readRDS("fit_lag_v2.rds")
+  fit_lag      <- readRDS("fit_lag.rds")
   fit_sac      <- readRDS("fit_sac.rds")
   fit_utr      <- readRDS("fit_utr.rds")
+  fit_mn_pos      <- readRDS("fit_mn_pos.rds")
+  fit_mn_ant      <- readRDS("fit_mn_ant.rds")
+  fit_mn_avg      <- readRDS("fit_mn_avg.rds")
 
 }
 
@@ -258,6 +261,9 @@ plot(conditional_smooths(fit_combined))
 plot(conditional_effects(fit_combined, effects = "lag_density_scale"))
 plot(conditional_effects(fit_combined, effects = "sac_density_scale"))
 plot(conditional_effects(fit_combined, effects = "utr_density_scale"))
+plot(conditional_effects(fit_combined, effects = "mn_pos_density_scale"))
+plot(conditional_effects(fit_combined, effects = "mn_ant_density_scale"))
+plot(conditional_effects(fit_combined, effects = "mn_avg_density_scale"))
 
 ```
 
